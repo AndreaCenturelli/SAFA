@@ -1,0 +1,123 @@
+!@encoding CP1252
+model Slave
+uses "mmxprs","mmsystem"; !gain access to the Xpress-Optimizer solver
+
+
+!sample declarations section
+declarations
+  n_nodes: integer
+  n_edges: integer
+  n_terminals: integer
+  commodities: range
+  nodes: range
+  edges: array(nodes,nodes) of boolean
+  out_name: text
+  terminals: list of set of integer
+  objval:real
+  x: array(nodes,nodes,commodities) of mpvar
+end-declarations
+declarations
+  test: array(nodes,nodes,commodities) of integer
+end-declarations
+
+initializations from "bin:shmem:indata"
+	n_nodes
+	n_edges
+	n_terminals
+	nodes
+	edges
+	out_name
+	terminals
+end-initializations
+commodities:=1..n_terminals
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! MODELLO!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!! 2	
+forall (v in 1..n_terminals) do
+	sum(j in 1..n_nodes | edges(v,j)=true) x(v,j,v)<=1
+	end-do
+!!!! 3
+forall (v in 1..n_terminals)
+	sum(i in 1..n_nodes | edges(i,v)=true) x(i,v,v)=0
+	
+!!!! 4
+forall (v in 1..n_terminals, k in {1..n_terminals} -{v})
+	(sum(i in 1..n_nodes | edges(i,v)=true) x(i,v,k))-(sum(j in 1..n_nodes | edges(v,j)=true) x(v,j,k))=0
+
+!!!! 5
+forall (v in 2*n_terminals+1..n_nodes,k in 1..n_terminals)
+	(sum(i in 1..n_nodes | edges(i,v)=true) x(i,v,k))-(sum(j in 1..n_nodes | edges(v,j)=true) x(v,j,k))=0
+
+!!!! 6
+forall (v in n_terminals+1..n_terminals*2)
+	sum(i in 1..n_nodes | edges(i,v)=true) x(i,v,v-n_terminals)<=1	
+	
+!!!! 7
+forall (v in n_terminals+1..n_terminals*2)
+	sum(j in 1..n_nodes | edges(v,j)=true) x(v,j,v-n_terminals)=0	
+!!!! 8
+forall (v in n_terminals+1..n_terminals*2, k in {1..n_terminals}-{v-n_terminals})
+	(sum(i in 1..n_nodes | edges(i,v)=true) x(i,v,k))-(sum(j in 1..n_nodes | edges(v,j)=true) x(v,j,k))=0 
+
+!!!! 9
+forall (i,j in 1..n_nodes | edges(i,j)=true and i<j) do
+	(sum(k in 1..n_terminals) x(i,j,k))+(sum(k in 1..n_terminals) x(j,i,k))<=1
+	!writeln(i," ",j)
+end-do
+!!!! 10
+forall (i,j in 1..n_nodes, k in 1..n_terminals) x(i,j,k) is_binary
+!!!! 1 
+z_edp:=sum(v in 1..n_terminals,j in 1..n_nodes | edges(v,j)=true) x(v,j,v)
+writeln("\n  Begin running model")
+writeln("          .\n          .\n          .")
+setcallback(XPRS_CB_INTSOL, "cb_intsol")
+fopen("output\\"+out_name,F_OUTPUT)
+writeln("Begin running model")
+setparam("XPRS_MAXTIME",-600)
+starttime:=gettime
+
+maximize(z_edp)
+	
+optimization_time:=gettime-starttime
+writeln("End running model")
+writeln("Total time: ",optimization_time)
+best_bound:= getparam("XPRS_BESTBOUND")
+active_nodes:=getparam("XPRS_ACTIVENODES")
+solved_nodes:=getparam("XPRS_NODES")
+nodes_depth:=getparam("XPRS_NODEDEPTH")
+objval:=getobjval
+writeln("Best bound: ",best_bound)
+writeln("Objective value: ",getobjval)
+writeln("Active nodes: ",active_nodes)
+writeln("Solved nodes: ", solved_nodes)
+writeln("Nodes' depth: ",nodes_depth)
+forall(i,j in 1..n_nodes, k in 1..n_terminals)
+	if getact(x(i,j,k))=1 then
+		writeln("From ",i, " to ",j," commodity: ",k)
+	end-if
+fclose(F_OUTPUT)
+writeln("  End running model\n")
+writeln("Total time: ",optimization_time)
+writeln("Best bound: ",best_bound)
+writeln("Objective value: ",getobjval)
+writeln("Active nodes: ",active_nodes)
+writeln("Solved nodes: ", solved_nodes)
+writeln("Nodes' depth: ",nodes_depth)
+	
+
+!**********************************************	
+public procedure cb_intsol
+   lastobjval:=objval
+   objval:= getparam("XPRS_LPOBJVAL")
+   best_bound:= getparam("XPRS_BESTBOUND")
+   ABS_GAP:=abs(best_bound-objval)
+   REL_GAP:=ABS_GAP/best_bound
+   writeln("Time: ",gettime-starttime ,"; New sol: ", objval,"; ABS_GAP: ",ABS_GAP,"; REL_GAP: ",REL_GAP)
+   
+   if REL_GAP<=0.03 then 
+     writeln("Stopping search for min GAP")
+     stopoptimize(XPRS_STOP_USER)
+   end-if
+ end-procedure	
+	
+end-model

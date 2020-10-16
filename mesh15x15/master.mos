@@ -1,0 +1,139 @@
+!@encoding CP1252
+model Master
+uses "mmjobs","mmsystem"; !gain access to the Xpress-Optimizer solver
+
+
+!sample declarations section
+declarations
+  dir_list: list of text
+  file_list: list of text
+  file_name: text
+  l: text
+  fpath: string
+  n_nodes: integer
+  n_edges: integer
+  n_terminals: integer
+  commodities: range
+  nodes: range
+  edges: array(nodes,nodes) of boolean
+  out_name: text
+  node1: integer
+  node2: integer
+  source: integer
+  sink: integer
+  terminals: list of set of integer
+  modSub: Model
+  optimization_time: real
+  objval: integer
+  best_bound: integer
+end-declarations
+master_start:=gettime
+!!!! ITERATE THROUGH ALL THE FILES IN THE FOLDER
+findfiles(SYS_DIRONLY,dir_list,'output')
+if dir_list=[] then
+	makedir('output')
+end-if
+findfiles(SYS_DIRONLY,dir_list,"com*")
+findfiles(SYS_RECURS,file_list,"mesh*REMAPPED.txt")
+!file_list:=[text("com10\\mesh15x15_com10_inst10_REMAPPED.txt"),
+!text("com10\\mesh15x15_com10_inst11_REMAPPED.txt"),
+!text("com10\\mesh15x15_com10_inst12_REMAPPED.txt"),
+!text("com10\\mesh15x15_com10_inst13_REMAPPED.txt")]
+
+forall (file in file_list) do
+	setparam("sys_endparse",0)      
+	setparam("sys_sepchar",getchar("_",1))
+	file_name:=file
+	!file_name:="com10\\mesh15x15_com10_inst1_REMAPPED.txt"
+	writeln("\n","Opening file: ",file_name)
+	trim(file_name,SYS_RIGHT)                        
+	while (nextfield(file_name)) do 
+		lista+=[parsetext(file_name)];
+	end-do
+	out_name:=lista(2)+"_"+lista(3)+".txt"
+	lista:=[]
+	
+		!!!! READ THE FILE (PARSE IT)
+	fopen(file_name,F_INPUT)
+	setparam("sys_sepchar",getchar(" ",1))    
+	n_nodes:=0
+	n_edges:=0 !CLEAR THE PARAMS OF THE LAST RUN
+	!!!! GET NUMBER OF NODES AND EDGES
+	if (readtextline(l)>0) then
+		trim(l,SYS_RIGHT)                        
+		setparam("sys_endparse",0)               
+		b:=nextfield(l)                           
+		n_nodes:=parseint(l); b:=b and nextfield(l)   
+		n_edges:=parseint(l);   
+	end-if
+	
+	
+	writeln(n_nodes," nodes and ",n_edges," edges")
+	if nodes={} then
+		nodes:=1..n_nodes
+	end-if
+	!!!! GET EDGES
+	contatore:=0
+	forall (nodo1,nodo2 in nodes) ! RESET THE EDGES FROM THE PREVIOUS RUN
+		edges(nodo1,nodo2):=false
+	while ( contatore<n_edges and readtextline(l)>0) do
+		trim(l,SYS_RIGHT)                        
+		setparam("sys_endparse",0)                
+		b:=nextfield(l)                          
+		node1:=parseint(l); b:=b and nextfield(l)  
+		node2:=parseint(l);
+		!writeln(node1,"-",node2)   
+		edges(node1,node2):=true
+		edges(node2,node1):=true
+		contatore+=1
+	end-do
+	!!!! GET NUMBER OF SOURCES AND SINKS
+	if (readtextline(l)>0) then
+		trim(l,SYS_RIGHT)                         
+		setparam("sys_endparse",0)               
+		b:=nextfield(l)                         
+		n_terminals:=parseint(l); 
+		writeln("terminals:",n_terminals)
+	end-if
+	!!!! GET SOURCES AND SINKS
+	terminals:=[] ! RESET THE TERMINALS FROM PREVIOUS RUN 
+	while (readtextline(l)>0) do
+		trim(l,SYS_RIGHT)                        
+		setparam("sys_endparse",0)               
+		b:=nextfield(l)                           
+		source:=parseint(l); b:=b and nextfield(l)   
+		sink:=parseint(l);  
+		terminals+=[{source,sink}]
+	end-do
+	fclose(F_INPUT)
+	
+	if compile("slave.mos")<>0 then exit(1); end-if
+	load(modSub, "slave.bim") ! Load the bim file
+	
+	initializations to "bin:shmem:indata"
+		n_nodes
+		n_edges
+		n_terminals
+		nodes
+		edges
+		out_name
+		node1
+		node2
+		source
+		sink
+		terminals
+	end-initializations
+	
+	run(modSub) ! Start model execution
+	wait ! Wait for model termination
+	dropnextevent ! Ignore termination event message
+	
+	fdelete("shmem")
+	writeln("\n*********Elapsed time since master start: ",gettime-master_start)
+
+
+
+end-do
+	
+end-model
+
