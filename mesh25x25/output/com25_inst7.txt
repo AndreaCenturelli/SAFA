@@ -1,0 +1,11 @@
+Begin running model
+Time: 6.206; New sol: 0; ABS_GAP: 600; REL_GAP: 1
+Time: 6.331; New sol: 1; ABS_GAP: 599; REL_GAP: 0.9983333333
+End running model
+Total time: 1801.77
+Best bound: 81.875
+Objective value: 1
+Active nodes: 1
+Solved nodes: 0
+Nodes' depth: 1
+From 151 to 307 commodity: 151

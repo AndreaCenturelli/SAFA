@@ -1,0 +1,9 @@
+Begin running model
+Time: 56.214; New sol: 0; ABS_GAP: 957; REL_GAP: 1
+End running model
+Total time: 1846.673
+Best bound: 96.67287234
+Objective value: 0
+Active nodes: 1
+Solved nodes: 0
+Nodes' depth: 1
